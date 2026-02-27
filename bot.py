@@ -11,9 +11,9 @@ from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ApplicationBuilder, CommandHandler, CallbackQueryHandler, MessageHandler, filters, ContextTypes
 
 # --- সেটিংস (আপনার তথ্যগুলো দিন) ---
-BOT_TOKEN = "YOUR_BOT_TOKEN_HERE"  
-BOT_USERNAME = "Your_Bot_Username" 
-ADMIN_IDS = [12345678] 
+BOT_TOKEN = "8624201473:AAGCtrK4FjtIUCco0ngPrKVK_x4Bt5vSguc"  
+BOT_USERNAME = "Prince_telecom_chatbot" 
+ADMIN_IDS = [5533760143] 
 SHEET_NAME = "Support_Bot_DB"
 JSON_KEY_FILE = "service_account.json"
 
