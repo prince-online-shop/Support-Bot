@@ -140,3 +140,23 @@ if __name__ == '__main__':
     
     print("বট সফলভাবে চালু হয়েছে...")
     application.run_polling()
+import http.server
+import socketserver
+import threading
+
+# রেন্ডারের পোর্ট এরর দূর করার জন্য একটি ডামি সার্ভার
+def run_dummy_server():
+    PORT = int(os.environ.get("PORT", 8080))
+    Handler = http.server.SimpleHTTPRequestHandler
+    with socketserver.TCPServer(("", PORT), Handler) as httpd:
+        print("ডামি সার্ভার চলছে পোর্ট:", PORT)
+        httpd.serve_forever()
+
+# বট চালু হওয়ার আগে ডামি সার্ভারটি আলাদা থ্রেডে চালু করুন
+if __name__ == '__main__':
+    threading.Thread(target=run_dummy_server, daemon=True).start()
+    
+    # আপনার বটের মেইন কোড এখানে থাকবে
+    application = ApplicationBuilder().token(BOT_TOKEN).build()
+    # ... বাকি কোড ...
+    application.run_polling()
