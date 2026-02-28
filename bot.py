@@ -1,104 +1,135 @@
-import logging
 import asyncio
-import gspread
-import json
-import os
-import http.server
-import socketserver
-import threading
-from oauth2client.service_account import ServiceAccountCredentials
+import pandas as pd
+import sqlite3
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ApplicationBuilder, CommandHandler, CallbackQueryHandler, MessageHandler, filters, ContextTypes
 
-# --- সেটিংস (আপনার তথ্যগুলো এখানে দিন) ---
-BOT_TOKEN = "8624201473:AAGCtrK4FjtIUCco0ngPrKVK_x4Bt5vSguc"  # BotFather থেকে পাওয়া টোকেন দিন
-BOT_USERNAME = "Prince_telecom_chatbot"  # @ ছাড়া বটের ইউজারনেম দিন
-ADMIN_IDS = [5533760143]  # আপনার আইডি দিন
-SHEET_NAME = "Support_Bot_DB"
+BOT_TOKEN = "YOUR_BOT_TOKEN"
+SHEET_ID = "YOUR_SHEET_ID"
+ADMIN_GROUP_ID = -100XXXXXXXXXX
 
-# লগিং সেটআপ
-logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
+# ================== Google Sheet Load ==================
+def load_sheet():
+    url = f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/export?format=csv"
+    return pd.read_csv(url)
 
-# গুগল শিট কানেক্ট করার জন্য Environment Variable পদ্ধতি
-def get_gsheet_client():
-    scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
-    
-    # এটি সরাসরি রেন্ডারের Environment Variable থেকে ডাটা নিবে
-    creds_json = os.environ.get("GOOGLE_CREDS")
-    
-    if not creds_json:
-        logging.error("GOOGLE_CREDS পাওয়া যায়নি! দয়া করে Render Environment-এ এটি সেট করুন।")
-        return None
-        
-    try:
-        # JSON টেক্সটকে ডিকশনারিতে রূপান্তর
-        info = json.loads(creds_json)
-        
-        # Private Key-এর ফরম্যাট ঠিক করা
-        if 'private_key' in info:
-            info['private_key'] = info['private_key'].replace('\\n', '\n')
-            
-        creds = ServiceAccountCredentials.from_json_keyfile_dict(info, scope)
-        return gspread.authorize(creds)
-    except Exception as e:
-        logging.error(f"Credentials Error: {e}")
-        return None
+data = load_sheet()
 
-# শিট থেকে ডাটা আনা
-def get_fresh_data():
-    client = get_gsheet_client()
-    if client:
+async def refresh_sheet():
+    global data
+    while True:
         try:
-            sheet = client.open(SHEET_NAME).sheet1
-            return sheet.get_all_records()
-        except Exception as e:
-            logging.error(f"Sheet Access Error: {e}")
-    return []
+            data = load_sheet()
+        except:
+            pass
+        await asyncio.sleep(60)
 
-# বাটন তৈরির ফাংশন
-def make_menu(parent_id, all_data):
+# ================== Database ==================
+conn = sqlite3.connect("tickets.db", check_same_thread=False)
+cursor = conn.cursor()
+
+cursor.execute("""
+CREATE TABLE IF NOT EXISTS tickets (
+    ticket_id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER,
+    username TEXT,
+    status TEXT
+)
+""")
+conn.commit()
+
+# ================== Menu Generator ==================
+def get_menu(parent_id):
+    rows = data[data["Parent_ID"] == parent_id]
     keyboard = []
-    filtered = [row for row in all_data if str(row.get('Parent_ID')) == str(parent_id)]
-    for row in filtered:
-        btn_text = str(row.get('Button_Text', 'বাটন'))
-        callback_id = str(row.get('ID', ''))
-        keyboard.append([InlineKeyboardButton(btn_text, callback_data=callback_id)])
+    for _, row in rows.iterrows():
+        keyboard.append(
+            [InlineKeyboardButton(row["Button_Text"], callback_data=str(row["ID"]))]
+        )
     return InlineKeyboardMarkup(keyboard)
 
-# /start কমান্ড
+# ================== Start ==================
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    all_data = get_fresh_data()
-    if not all_data:
-        await update.message.reply_text("দুঃখিত, তথ্য লোড করা যাচ্ছে না। দয়া করে এডমিনকে জানান।")
-        return
-    await update.message.reply_text("স্বাগতম! একটি অপশন বেছে নিন:", reply_markup=make_menu(0, all_data))
+    await update.message.reply_text(
+        "মেনু নির্বাচন করুন:",
+        reply_markup=get_menu(0)
+    )
 
-# Render-এর পোর্ট সমস্যা সমাধানের জন্য ডামি সার্ভার
-def run_dummy_server():
-    PORT = int(os.environ.get("PORT", 8080))
-    handler = http.server.SimpleHTTPRequestHandler
-    with socketserver.TCPServer(("", PORT), handler) as httpd:
-        logging.info(f"Dummy server running on port {PORT}")
-        httpd.serve_forever()
+# ================== Button Click ==================
+async def button_click(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    row = data[data["ID"] == int(query.data)].iloc[0]
 
-# মেইন ফাংশন
-async def main():
-    # ডামি সার্ভার চালু
-    threading.Thread(target=run_dummy_server, daemon=True).start()
-    
-    application = ApplicationBuilder().token(BOT_TOKEN).build()
-    application.add_handler(CommandHandler("start", start))
-    
-    async with application:
-        await application.initialize()
-        await application.start()
-        print("বট সফলভাবে চালু হয়েছে...")
-        await application.updater.start_polling()
-        while True:
-            await asyncio.sleep(1)
+    if row["Type"] == "menu":
+        await query.message.reply_text(
+            "নির্বাচন করুন:",
+            reply_markup=get_menu(row["ID"])
+        )
 
-if __name__ == '__main__':
-    try:
-        asyncio.run(main())
-    except (KeyboardInterrupt, SystemExit):
-        pass
+    elif row["Type"] == "info":
+        await query.message.reply_text(row["Reply_Text"])
+
+    elif row["Type"] == "support":
+        user = query.from_user
+        cursor.execute(
+            "INSERT INTO tickets (user_id, username, status) VALUES (?, ?, ?)",
+            (user.id, user.full_name, "OPEN")
+        )
+        conn.commit()
+        ticket_id = cursor.lastrowid
+
+        context.user_data["ticket"] = ticket_id
+
+        await query.message.reply_text(
+            f"🎫 Ticket #{ticket_id} তৈরি হয়েছে\nআপনার সমস্যা লিখুন:"
+        )
+
+# ================== User Message → Admin ==================
+async def user_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if "ticket" in context.user_data:
+        ticket_id = context.user_data["ticket"]
+        user = update.message.from_user
+
+        keyboard = [[InlineKeyboardButton("🔴 Close", callback_data=f"close_{ticket_id}")]]
+        sent = await context.bot.send_message(
+            ADMIN_GROUP_ID,
+            f"🎫 Ticket #{ticket_id}\nUser ID: {user.id}\nName: {user.full_name}\n\n{update.message.text}",
+            reply_markup=InlineKeyboardMarkup(keyboard)
+        )
+
+        context.user_data.clear()
+        await update.message.reply_text("✅ সাপোর্টে পাঠানো হয়েছে।")
+
+# ================== Admin Reply → User ==================
+async def admin_reply(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if update.message.chat.id == ADMIN_GROUP_ID:
+        if update.message.reply_to_message:
+            text = update.message.reply_to_message.text
+            if "User ID:" in text:
+                user_id = int(text.split("User ID: ")[1].split("\n")[0])
+                await context.bot.send_message(user_id, f"💬 Support:\n{update.message.text}")
+
+# ================== Close Ticket ==================
+async def close_ticket(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+
+    ticket_id = int(query.data.split("_")[1])
+    cursor.execute("UPDATE tickets SET status='CLOSED' WHERE ticket_id=?", (ticket_id,))
+    conn.commit()
+
+    await query.edit_message_text(f"🔴 Ticket #{ticket_id} Closed")
+
+# ================== App Run ==================
+app = ApplicationBuilder().token(BOT_TOKEN).build()
+
+app.add_handler(CommandHandler("start", start))
+app.add_handler(CallbackQueryHandler(button_click))
+app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, user_message))
+app.add_handler(MessageHandler(filters.TEXT & filters.Chat(ADMIN_GROUP_ID), admin_reply))
+app.add_handler(CallbackQueryHandler(close_ticket, pattern="^close_"))
+
+app.job_queue.run_once(lambda ctx: asyncio.create_task(refresh_sheet()), 1)
+
+app.run_polling()
