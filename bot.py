@@ -4,9 +4,9 @@ import sqlite3
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ApplicationBuilder, CommandHandler, CallbackQueryHandler, MessageHandler, filters, ContextTypes
 
-BOT_TOKEN = "YOUR_BOT_TOKEN"
-SHEET_ID = "YOUR_SHEET_ID"
-ADMIN_GROUP_ID = -100XXXXXXXXXX
+BOT_TOKEN = "8624201473:AAGCtrK4FjtIUCco0ngPrKVK_x4Bt5vSguc"
+SHEET_ID = "14aC8U3zUhkn4A7OclNKOT03Xt7T5Lpl0cuVzPzNCa7k"
+ADMIN_GROUP_ID = -5077527750
 
 # ================== Google Sheet Load ==================
 def load_sheet():
