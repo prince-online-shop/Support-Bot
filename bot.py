@@ -1,12 +1,14 @@
 import asyncio
+import os
 import pandas as pd
 import sqlite3
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ApplicationBuilder, CommandHandler, CallbackQueryHandler, MessageHandler, filters, ContextTypes
 
-BOT_TOKEN = "8624201473:AAGCtrK4FjtIUCco0ngPrKVK_x4Bt5vSguc"
-SHEET_ID = "14aC8U3zUhkn4A7OclNKOT03Xt7T5Lpl0cuVzPzNCa7k"
-ADMIN_GROUP_ID = -5077527750
+# ================== ENV VARIABLES ==================
+BOT_TOKEN = os.getenv("BOT_TOKEN")
+SHEET_ID = os.getenv("SHEET_ID")
+ADMIN_GROUP_ID = int(os.getenv("ADMIN_GROUP_ID"))
 
 # ================== Google Sheet Load ==================
 def load_sheet():
@@ -92,7 +94,7 @@ async def user_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         user = update.message.from_user
 
         keyboard = [[InlineKeyboardButton("🔴 Close", callback_data=f"close_{ticket_id}")]]
-        sent = await context.bot.send_message(
+        await context.bot.send_message(
             ADMIN_GROUP_ID,
             f"🎫 Ticket #{ticket_id}\nUser ID: {user.id}\nName: {user.full_name}\n\n{update.message.text}",
             reply_markup=InlineKeyboardMarkup(keyboard)
